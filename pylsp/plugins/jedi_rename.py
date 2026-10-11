@@ -29,6 +29,7 @@ def pylsp_rename(config, workspace, document, position, new_name):
     for file_path, changed_file in changed_files.items():
         uri = uris.from_fs_path(str(file_path))
         doc = workspace.get_maybe_document(uri)
+        source = workspace.get_document(uri).source
         changes.append(
             {
                 "textDocument": {"uri": uri, "version": doc.version if doc else None},
@@ -36,10 +37,7 @@ def pylsp_rename(config, workspace, document, position, new_name):
                     {
                         "range": {
                             "start": {"line": 0, "character": 0},
-                            "end": {
-                                "line": _num_lines(changed_file.get_new_code()),
-                                "character": 0,
-                            },
+                            "end": _end_position(source),
                         },
                         "newText": changed_file.get_new_code(),
                     }
@@ -49,8 +47,9 @@ def pylsp_rename(config, workspace, document, position, new_name):
     return {"documentChanges": changes}
 
 
-def _num_lines(file_contents):
-    "Count the number of lines in the given string."
-    if _utils.get_eol_chars(file_contents):
-        return len(file_contents.splitlines())
-    return 0
+def _end_position(file_contents):
+    lines = file_contents.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return {
+        "line": len(lines) - 1,
+        "character": len(lines[-1].encode("utf-16-le")) // 2,
+    }

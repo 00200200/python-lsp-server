@@ -7,6 +7,7 @@ import pytest
 
 from pylsp import uris
 from pylsp.plugins.jedi_rename import pylsp_rename
+from pylsp.text_edit import apply_text_edits
 from pylsp.workspace import Document
 
 DOC_NAME = "test1.py"
@@ -31,6 +32,32 @@ def tmp_workspace(temp_workspace_factory):
     return temp_workspace_factory(
         {DOC_NAME: DOC, DOC_NAME_EXTRA: DOC_EXTRA, DOC_NAME_SIMPLE: DOC_SIMPLE}
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "end"),
+    [
+        ("foo = 12", {"line": 0, "character": 8}),
+        ("foo = 12\nfoo", {"line": 1, "character": 3}),
+        ("foo = 12\r\nfoo", {"line": 1, "character": 3}),
+        ("foo = 12\n", {"line": 1, "character": 0}),
+        ('foo = "\U0001f600\u2028"', {"line": 0, "character": 11}),
+    ],
+)
+def test_jedi_rename_replaces_entire_document(
+    temp_workspace_factory, config, source, end
+):
+    workspace = temp_workspace_factory({"rename.py": source})
+    uri = uris.from_fs_path(os.path.join(workspace.root_path, "rename.py"))
+    doc = workspace.get_document(uri)
+
+    result = pylsp_rename(
+        config, workspace, doc, {"line": 0, "character": 0}, "renamed"
+    )
+
+    edits = result["documentChanges"][0]["edits"]
+    assert apply_text_edits(doc, edits) == source.replace("foo", "renamed")
+    assert edits[0]["range"]["end"] == end
 
 
 def test_jedi_rename(tmp_workspace, config) -> None:
@@ -98,7 +125,7 @@ def test_jedi_rename(tmp_workspace, config) -> None:
         {
             "range": {
                 "start": {"line": 0, "character": 0},
-                "end": {"line": 0, "character": 0},
+                "end": {"line": 0, "character": 8},
             },
             "newText": "bar = 12",
         }
